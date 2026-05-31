@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1020" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+  <title>Stock Signals</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="./icons/icon.svg" />
+  <link rel="apple-touch-icon" href="./icons/icon.svg" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <!-- ========== LIST VIEW ========== -->
+  <section id="listView" class="view">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-logo"></div>
+        <div>
+          <div class="brand-title">Signals</div>
+          <div class="brand-sub" id="updatedAt">—</div>
+        </div>
+      </div>
+      <button id="refreshBtn" class="icon-btn" aria-label="Aggiorna">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      </button>
+    </header>
+
+    <div class="disclaimer" id="disclaimer">Solo a scopo informativo. Non è consulenza finanziaria.</div>
+
+    <div id="offlineBar" class="offline-bar hidden">⚠ Sei offline — mostro dati salvati</div>
+
+    <div id="progress" class="progress hidden" aria-live="polite">
+      <div class="progress-row">
+        <span id="progressLabel">Carico…</span>
+        <span id="progressPct">0%</span>
+      </div>
+      <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+    </div>
+
+    <nav class="filters" id="filters">
+      <button class="chip active" data-filter="ALL">Tutti <span class="count" id="cntAll">0</span></button>
+      <button class="chip" data-filter="BUY">Buy <span class="count" id="cntBuy">0</span></button>
+      <button class="chip" data-filter="SELL">Sell <span class="count" id="cntSell">0</span></button>
+      <button class="chip" data-filter="HOLD">Hold <span class="count" id="cntHold">0</span></button>
+    </nav>
+
+    <main id="cards" class="cards"></main>
+
+    <div id="errors" class="errors"></div>
+
+    <p class="footnote">Tira giù per aggiornare ⬇</p>
+
+    <button id="fabAdd" class="fab" aria-label="Aggiungi titolo">+</button>
+  </section>
+  <section id="detailView" class="view hidden">
+    <header class="topbar">
+      <button id="backBtn" class="icon-btn" aria-label="Indietro">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <div class="detail-head">
+        <div class="detail-symbol" id="detailSymbol">—</div>
+        <div class="detail-name" id="detailName">—</div>
+      </div>
+      <div style="width:40px"></div>
+    </header>
+
+    <div class="detail-body">
+      <div class="price-block">
+        <div class="price-large" id="detailPrice">—</div>
+        <div class="price-change" id="detailChange">—</div>
+      </div>
+
+      <div class="signal-banner" id="signalBanner">
+        <div class="signal-banner-label" id="signalBannerLabel">—</div>
+        <div class="signal-banner-action" id="signalBannerAction">—</div>
+        <div class="signal-banner-reason" id="signalBannerReason">—</div>
+      </div>
+
+      <div class="chart-wrap">
+        <div class="chart-title">Ultimi 90 giorni</div>
+        <svg id="sparkline" class="sparkline" viewBox="0 0 320 120" preserveAspectRatio="none"></svg>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat"><div class="stat-k">RSI(14)</div><div class="stat-v" id="statRsi">—</div></div>
+        <div class="stat"><div class="stat-k">SMA 50</div><div class="stat-v" id="statSma50">—</div></div>
+        <div class="stat"><div class="stat-k">SMA 200</div><div class="stat-v" id="statSma200">—</div></div>
+        <div class="stat"><div class="stat-k">Target</div><div class="stat-v" id="statTarget">—</div></div>
+        <div class="stat"><div class="stat-k">Massimo 20d</div><div class="stat-v" id="statHigh">—</div></div>
+        <div class="stat"><div class="stat-k">Minimo 20d</div><div class="stat-v" id="statLow">—</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== ADD/MANAGE SHEET ========== -->
+  <div id="sheetBackdrop" class="sheet-backdrop hidden"></div>
+  <div id="manageSheet" class="sheet hidden" role="dialog" aria-modal="true" aria-label="Gestisci titoli">
+    <div class="sheet-handle"></div>
+    <header class="sheet-head">
+      <h2>Gestisci titoli</h2>
+      <button class="icon-btn" id="sheetClose" aria-label="Chiudi">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </header>
+
+    <div class="sheet-body">
+      <label class="field">
+        <span class="field-label">Cerca un titolo</span>
+        <input id="searchInput" type="text" placeholder="es. Apple, ENI, BTC, SAP..." autocomplete="off"/>
+      </label>
+      <div id="searchResults" class="search-results"></div>
+
+      <div class="sheet-divider">I tuoi titoli (<span id="watchCount">0</span>)</div>
+      <ul id="watchlistEditor" class="watchlist-editor"></ul>
+
+      <details class="advanced">
+        <summary>Aggiungi codice Stooq manuale</summary>
+        <p class="hint">Inserisci il codice ticker di stooq.com (es. <code>aapl.us</code>, <code>eni.it</code>, <code>btcusd</code>).</p>
+        <div class="row">
+          <input id="manualSymbol" type="text" placeholder="Etichetta (es. AAPL)" />
+          <input id="manualStooq" type="text" placeholder="Codice stooq (es. aapl.us)" />
+        </div>
+        <div class="row">
+          <input id="manualName" type="text" placeholder="Nome (es. Apple)" />
+          <select id="manualCurrency">
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+            <option value="GBP">GBP</option>
+            <option value="JPY">JPY</option>
+          </select>
+        </div>
+        <button class="btn-primary" id="manualAddBtn">Aggiungi</button>
+      </details>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./service-worker.js').catch(console.error);
+      });
+    }
+  </script>
+</body>
+</html>

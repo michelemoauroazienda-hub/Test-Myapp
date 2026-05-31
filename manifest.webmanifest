@@ -1,0 +1,14 @@
+{
+  "name": "Stock Signals",
+  "short_name": "Signals",
+  "description": "Watchlist azioni globali con segnali BUY/SELL/HOLD.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "./icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
