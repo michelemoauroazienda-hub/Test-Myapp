@@ -99,11 +99,33 @@ function saveCache(obj) {
 }
 
 // === Data layer ============================================================
+// stooq.com does not send CORS headers, so direct fetch() from a browser
+// origin (e.g. GitHub Pages) is blocked. We route the CSV request through
+// a list of public CORS proxies and use the first one that succeeds.
+const STOOQ_PROXIES = [
+  (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+  (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+  (u) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`,
+  (u) => `https://thingproxy.freeboard.io/fetch/${u}`,
+];
+
 async function fetchHistory(stooqCode) {
-  const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(stooqCode)}&i=d`;
-  const resp = await fetch(url, { cache: "no-store" });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  const text = await resp.text();
+  const target = `https://stooq.com/q/d/l/?s=${encodeURIComponent(stooqCode)}&i=d`;
+  let lastErr = null;
+  let text = null;
+  for (const wrap of STOOQ_PROXIES) {
+    try {
+      const resp = await fetch(wrap(target), { cache: "no-store" });
+      if (!resp.ok) { lastErr = new Error(`HTTP ${resp.status}`); continue; }
+      const body = await resp.text();
+      if (!body || body.length < 20) { lastErr = new Error("risposta vuota"); continue; }
+      text = body;
+      break;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  if (text == null) throw lastErr || new Error("rete non disponibile");
   if (text.trim().toLowerCase().startsWith("no data")) throw new Error("nessun dato");
   const rows = text.trim().split(/\r?\n/).slice(1);
   const bars = [];
