@@ -99,11 +99,16 @@ function saveCache(obj) {
 }
 
 // === Data layer ============================================================
-// stooq.com does not send CORS headers, so direct fetch() from a browser
-// origin (e.g. GitHub Pages) is blocked. We route the CSV request through
-// a list of public CORS proxies and use the first one that succeeds.
-// Each entry: { url(target) -> proxiedUrl, parse(responseText) -> csvText }
-const STOOQ_PROXIES = [
+// stooq.com does not send CORS headers, so a direct fetch() from the browser
+// is blocked. The robust solution is your own tiny Cloudflare Worker proxy
+// (see cloudflare-worker/stooq-proxy.js). Once deployed, configure it with:
+//   localStorage.setItem("ss.proxyBase", "https://YOUR-WORKER.workers.dev");
+// You can also hard-code it here:
+const STOOQ_PROXY_BASE = ""; // e.g. "https://stooq-proxy.yourname.workers.dev"
+
+// As a fallback (best effort, often rate-limited), we try a list of public
+// CORS proxies until one returns valid CSV.
+const PUBLIC_PROXIES = [
   {
     url: (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
     parse: (t) => { try { return JSON.parse(t).contents || ""; } catch { return ""; } },
@@ -120,11 +125,22 @@ const STOOQ_PROXIES = [
     url: (u) => `https://cors.isomorphic-git.org/${u}`,
     parse: (t) => t,
   },
-  {
-    url: (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-    parse: (t) => t,
-  },
 ];
+
+function getProxies() {
+  let base = STOOQ_PROXY_BASE;
+  try { base = base || localStorage.getItem("ss.proxyBase") || ""; } catch {}
+  base = (base || "").replace(/\/+$/, "");
+  const list = [];
+  if (base) {
+    // Own proxy: forward the original query string directly.
+    list.push({
+      url: (u) => base + "/" + new URL(u).search,
+      parse: (t) => t,
+    });
+  }
+  return list.concat(PUBLIC_PROXIES);
+}
 
 function fetchWithTimeout(url, ms = 12000) {
   const ctrl = new AbortController();
@@ -144,7 +160,7 @@ async function fetchHistory(stooqCode) {
   const target = `https://stooq.com/q/d/l/?s=${encodeURIComponent(stooqCode)}&i=d`;
   let lastErr = null;
   let csv = null;
-  for (const p of STOOQ_PROXIES) {
+  for (const p of getProxies()) {
     try {
       const resp = await fetchWithTimeout(p.url(target));
       if (!resp.ok) { lastErr = new Error(`HTTP ${resp.status}`); continue; }
