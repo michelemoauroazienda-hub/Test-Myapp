@@ -102,32 +102,64 @@ function saveCache(obj) {
 // stooq.com does not send CORS headers, so direct fetch() from a browser
 // origin (e.g. GitHub Pages) is blocked. We route the CSV request through
 // a list of public CORS proxies and use the first one that succeeds.
+// Each entry: { url(target) -> proxiedUrl, parse(responseText) -> csvText }
 const STOOQ_PROXIES = [
-  (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-  (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-  (u) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`,
-  (u) => `https://thingproxy.freeboard.io/fetch/${u}`,
+  {
+    url: (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+    parse: (t) => { try { return JSON.parse(t).contents || ""; } catch { return ""; } },
+  },
+  {
+    url: (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+    parse: (t) => t,
+  },
+  {
+    url: (u) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`,
+    parse: (t) => t,
+  },
+  {
+    url: (u) => `https://cors.isomorphic-git.org/${u}`,
+    parse: (t) => t,
+  },
+  {
+    url: (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    parse: (t) => t,
+  },
 ];
+
+function fetchWithTimeout(url, ms = 12000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { cache: "no-store", signal: ctrl.signal, redirect: "follow" })
+    .finally(() => clearTimeout(t));
+}
+
+function looksLikeCsv(text) {
+  if (!text) return false;
+  const head = text.slice(0, 200).toLowerCase();
+  if (head.includes("<html") || head.includes("<!doctype")) return false;
+  return head.includes("date,") || head.includes("date;") || /\d{4}-\d{2}-\d{2}/.test(head);
+}
 
 async function fetchHistory(stooqCode) {
   const target = `https://stooq.com/q/d/l/?s=${encodeURIComponent(stooqCode)}&i=d`;
   let lastErr = null;
-  let text = null;
-  for (const wrap of STOOQ_PROXIES) {
+  let csv = null;
+  for (const p of STOOQ_PROXIES) {
     try {
-      const resp = await fetch(wrap(target), { cache: "no-store" });
+      const resp = await fetchWithTimeout(p.url(target));
       if (!resp.ok) { lastErr = new Error(`HTTP ${resp.status}`); continue; }
       const body = await resp.text();
-      if (!body || body.length < 20) { lastErr = new Error("risposta vuota"); continue; }
-      text = body;
+      const text = p.parse(body);
+      if (!looksLikeCsv(text)) { lastErr = new Error("risposta non valida"); continue; }
+      csv = text;
       break;
     } catch (e) {
       lastErr = e;
     }
   }
-  if (text == null) throw lastErr || new Error("rete non disponibile");
-  if (text.trim().toLowerCase().startsWith("no data")) throw new Error("nessun dato");
-  const rows = text.trim().split(/\r?\n/).slice(1);
+  if (csv == null) throw lastErr || new Error("rete non disponibile");
+  if (csv.trim().toLowerCase().startsWith("no data")) throw new Error("nessun dato");
+  const rows = csv.trim().split(/\r?\n/).slice(1);
   const bars = [];
   for (const line of rows) {
     const [date, open, high, low, close, volume] = line.split(",");

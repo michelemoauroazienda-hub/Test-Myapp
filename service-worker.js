@@ -1,5 +1,5 @@
 // Stock Signals service worker - cache shell for offline use.
-const CACHE = "stocksignals-v3";
+const CACHE = "stocksignals-v4";
 const SHELL = [
   "./",
   "./index.html",
@@ -24,10 +24,12 @@ self.addEventListener("activate", (e) => {
 });
 
 self.addEventListener("fetch", (e) => {
+  // Only intercept same-origin GETs (the app shell). All cross-origin
+  // requests (market data, CORS proxies, CDNs, etc.) bypass the SW entirely
+  // so we don't turn transient network errors into opaque "Failed to fetch".
+  if (e.request.method !== "GET") return;
   const url = new URL(e.request.url);
-
-  // Never cache market data: always go to network.
-  if (url.hostname.includes("stooq.com")) return;
+  if (url.origin !== self.location.origin) return;
 
   // Cache-first for app shell.
   e.respondWith(
